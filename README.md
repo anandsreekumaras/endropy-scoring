@@ -60,3 +60,4 @@ before trusting any contract with funds.
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
