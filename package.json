@@ -1,0 +1,48 @@
+{
+  "name": "endropy-scoring",
+  "version": "0.1.0",
+  "description": "Rule-based smart-contract risk scoring + MinHash bytecode similarity. Pure TypeScript, no runtime dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "SCORING.md",
+    "CONTRIBUTING.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "tsx src/scoring.fixtures.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anandsreekumaras/endropy-scoring.git"
+  },
+  "homepage": "https://endropy.xyz",
+  "bugs": {
+    "url": "https://github.com/anandsreekumaras/endropy-scoring/issues"
+  },
+  "keywords": [
+    "ethereum",
+    "smart-contract",
+    "risk",
+    "scoring",
+    "minhash",
+    "bytecode",
+    "security"
+  ]
+}
