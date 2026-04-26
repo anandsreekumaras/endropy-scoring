@@ -7,6 +7,8 @@ export {
 export {
   scoreScan,
   RULES,
+  rule_ofac_sanctioned,
+  rule_not_a_contract,
 } from "./scoring";
 
 export type {
@@ -16,4 +18,5 @@ export type {
   CorpusMatch,
   ScoringInput,
   ScoringOutput,
+  Rule,
 } from "./scoring";

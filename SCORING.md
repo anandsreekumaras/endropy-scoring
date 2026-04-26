@@ -9,6 +9,7 @@ to a verdict.
 
 | rule_id                    | Points | Severity | Triggers when                                                                        |
 |----------------------------|-------:|----------|---------------------------------------------------------------------------------------|
+| `ofac_sanctioned`          |  +100  | critical | Address is on the U.S. Treasury OFAC SDN sanctions list.                             |
 | `deployer_funded_by_mixer` |   +35  | high     | Deployer's first funding came from a known mixer address (e.g. Tornado Cash router). |
 | `deployer_fresh_wallet`    |   +15  | med      | Deployer's first-ever transaction was < 30 days before scan time.                    |
 | `deployer_low_activity`    |   +10  | med      | Deployer has fewer than 10 transactions on record.                                   |
@@ -19,17 +20,29 @@ to a verdict.
 Note: `bytecode_high_similarity` and `bytecode_med_similarity` are
 mutually exclusive — only the higher-tier match fires.
 
+### Informational rules (not in default `RULES`)
+
+These rules are exported standalone. They contribute zero points but tag
+the scan output for presentation. Callers opt in by invoking them
+directly.
+
+| rule_id           | Points | Severity | Triggers when                                                  |
+|-------------------|-------:|----------|----------------------------------------------------------------|
+| `not_a_contract`  |    0   | info     | `contract.is_contract === false` (the address is an EOA).     |
+
 ## Severity chips
 
 Computed from the rule's points value (independent of the rule itself,
 so hand-written rules and future auto-generated rules get chips
 consistently):
 
-| points range | severity |
-|:------------:|----------|
-| `< 10`       | low      |
-| `10 ≤ p ≤ 25`| med      |
-| `> 25`       | high     |
+| points range  | severity |
+|:-------------:|----------|
+| `p ≤ 0`       | info     |
+| `0 < p < 10`  | low      |
+| `10 ≤ p ≤ 25` | med      |
+| `25 < p < 100`| high     |
+| `p ≥ 100`     | critical |
 
 ## Verdicts
 
@@ -60,14 +73,16 @@ consistently):
 - Time-dependent rules (`deployer_fresh_wallet`) use the
   `scanned_at` timestamp from the input, not `Date.now()`. This lets
   callers replay historical scans reproducibly.
-- Static seed lists (mixer addresses, known exchanges) live in the
-  caller, not in this package. This package only reads the boolean
-  `signals.mixer_funded` that the caller computed.
+- Static seed lists (mixer addresses, known exchanges, OFAC SDN list)
+  live in the caller, not in this package. This package only reads
+  booleans (`signals.mixer_funded`, `signals.ofac_sanctioned`) that
+  the caller computed against those lists.
 - Additive scoring has blind spots. A contract that is unverified AND
   has 30-day-fresh deployer AND is 100% bytecode-match to a known
   exploit maxes out at 20+15+30 = 65 — still below
-  `do_not_interact`. The mixer rule is the only single-rule trigger
-  that pushes into the top band.
+  `do_not_interact`. `ofac_sanctioned` (+100) and the mixer rule (+35
+  alongside other deployer flags) are the single-rule triggers that
+  push into the top band.
 - Jaccard on MinHash is a stochastic estimate. 128 permutations give
   roughly ±0.07 standard error near 0.5. For corpus matching we round
   to three decimals when rendering.

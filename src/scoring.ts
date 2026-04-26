@@ -1,7 +1,7 @@
 // Rule-based risk scorer. Pure function: (ScoringInput) => ScoringOutput.
 // No dependencies, no side effects, no I/O.
 
-export type Severity = "low" | "med" | "high";
+export type Severity = "info" | "low" | "med" | "high" | "critical";
 export type Verdict = "clean" | "caution" | "high_risk" | "do_not_interact";
 
 export type Finding = {
@@ -30,6 +30,7 @@ export type ScoringInput = {
   signals: {
     mixer_funded: boolean;
     fresh_wallet: boolean;
+    ofac_sanctioned?: boolean;
   };
   activity_count: number;
   corpus_match: CorpusMatch | null;
@@ -42,11 +43,17 @@ export type ScoringOutput = {
 };
 
 // Severity bands by points value.
-// Per spec: < 10 low, 10-25 med, > 25 high.
+//   p === 0          → info     (descriptive, non-scoring)
+//   0 < p < 10       → low
+//   10 ≤ p ≤ 25      → med
+//   25 < p < 100     → high
+//   p ≥ 100          → critical (single-rule trip into do_not_interact)
 function severityFor(points: number): Severity {
+  if (points <= 0) return "info";
   if (points < 10) return "low";
   if (points <= 25) return "med";
-  return "high";
+  if (points < 100) return "high";
+  return "critical";
 }
 
 function verdictFor(score: number): Verdict {
@@ -56,7 +63,38 @@ function verdictFor(score: number): Verdict {
   return "do_not_interact";
 }
 
-type Rule = (ctx: ScoringInput) => Finding | null;
+export type Rule = (ctx: ScoringInput) => Finding | null;
+
+// ofac_sanctioned: address is on the U.S. Treasury OFAC SDN list.
+// The boolean signal is filled at the runtime layer (in endropy.xyz, a
+// Cloudflare Worker that consults a daily-refreshed list cached in KV);
+// this package only owns the rule's id, weight, severity, and reason.
+export const rule_ofac_sanctioned: Rule = (ctx) => {
+  if (!ctx.signals.ofac_sanctioned) return null;
+  const points = 100;
+  return {
+    rule_id: "ofac_sanctioned",
+    points,
+    reason:
+      "address is on the OFAC SDN sanctions list — transacting may violate U.S. sanctions law",
+    severity: severityFor(points),
+  };
+};
+
+// not_a_contract: address is an EOA. Pure function on input. Exported
+// standalone (not in default RULES) so callers can opt in to EOA tagging
+// without changing the score-only output of scoreScan().
+export const rule_not_a_contract: Rule = (ctx) => {
+  if (ctx.contract.is_contract) return null;
+  const points = 0;
+  return {
+    rule_id: "not_a_contract",
+    points,
+    reason:
+      "address is an EOA (externally owned account); contract-analysis rules don't apply. sanctions screening is the only check available for wallets in v0.1",
+    severity: severityFor(points),
+  };
+};
 
 const rule_deployer_funded_by_mixer: Rule = (ctx) => {
   if (!ctx.signals.mixer_funded) return null;
@@ -136,6 +174,7 @@ const rule_bytecode_similarity: Rule = (ctx) => {
 };
 
 export const RULES: Rule[] = [
+  rule_ofac_sanctioned,
   rule_deployer_funded_by_mixer,
   rule_deployer_fresh_wallet,
   rule_deployer_low_activity,

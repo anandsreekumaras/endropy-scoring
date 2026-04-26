@@ -1,6 +1,6 @@
 {
   "name": "endropy-scoring",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Rule-based smart-contract risk scoring + MinHash bytecode similarity. Pure TypeScript, no runtime dependencies.",
   "license": "MIT",
   "type": "module",

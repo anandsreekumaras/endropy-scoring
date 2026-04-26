@@ -15,10 +15,16 @@ methodology is wrong.
 
 ## What's included
 
-- `src/` — the rule engine, score aggregation, and verdict logic.
-- `src/scoring.fixtures.test.ts` — fixture tests demonstrating that each rule
-  fires correctly on known inputs.
-- `package.json` — minimal dependencies (TypeScript only).
+- `src/scoring.ts` — the rule engine, score aggregation, and verdict logic.
+  Includes `ofac_sanctioned`, `deployer_funded_by_mixer`,
+  `deployer_fresh_wallet`, `deployer_low_activity`, `unverified_source`,
+  `bytecode_high_similarity`, `bytecode_med_similarity`, plus the
+  standalone informational rule `not_a_contract`.
+- `src/bytecode.ts` — MinHash signatures and Jaccard similarity for
+  bytecode comparison.
+- `src/scoring.fixtures.test.ts` — fixture tests demonstrating that each
+  rule fires correctly on known inputs.
+- `package.json` — TypeScript only; no runtime dependencies.
 
 ## What's not included
 
@@ -26,6 +32,21 @@ The exploit corpus used for bytecode-similarity matching is maintained
 separately and is not part of this repo. The matching algorithm (MinHash on
 opcode sequences) is open; the dataset is curated from public sources but
 not redistributed here for security reasons.
+
+## Runtime-evaluated rules
+
+Some rules require runtime context (live API calls, KV cache, etc.) and
+can't be fully evaluated within this package alone. Their definitions
+live here so the schema and scoring weights are public and auditable, but
+their input booleans are computed in endropy.xyz's Cloudflare Worker and
+passed in via `ScoringInput.signals`:
+
+- `ofac_sanctioned` — checks the address against the OFAC SDN sanctions
+  list, refreshed daily by a Cloudflare Worker cron job. Source:
+  [community mirror](https://github.com/0xB10C/ofac-sanctioned-digital-currency-addresses)
+  of the U.S. Department of the Treasury list.
+- `deployer_funded_by_mixer` — depends on a curated list of mixer
+  addresses (Tornado Cash routers, etc.) maintained outside this package.
 
 ## Running the tests
 

@@ -1,7 +1,12 @@
 // Fixture tests for the scoring function. Run with:
-//   npx tsx packages/endropy-scoring/src/scoring.fixtures.test.ts
+//   npm test
 
-import { scoreScan, type ScoringInput, type ScoringOutput } from "./scoring";
+import {
+  scoreScan,
+  rule_not_a_contract,
+  type ScoringInput,
+  type ScoringOutput,
+} from "./scoring";
 import assert from "node:assert/strict";
 
 type Case = {
@@ -245,6 +250,93 @@ const cases: Case[] = [
       ],
     },
   },
+  {
+    name: "ofac_sanctioned alone — critical, do_not_interact at score 100",
+    input: {
+      scanned_at: 1700000000,
+      contract: { is_contract: true, is_verified: true },
+      deployer: { funded_by: "0xabc", first_seen_at: 1600000000 },
+      signals: { mixer_funded: false, fresh_wallet: false, ofac_sanctioned: true },
+      activity_count: 500,
+      corpus_match: null,
+    },
+    expect: {
+      risk_score: 100,
+      verdict: "do_not_interact",
+      findings: [
+        {
+          rule_id: "ofac_sanctioned",
+          points: 100,
+          reason:
+            "address is on the OFAC SDN sanctions list — transacting may violate U.S. sanctions law",
+          severity: "critical",
+        },
+      ],
+    },
+  },
+  {
+    name: "ofac_sanctioned stacks with other findings — still capped at 100",
+    input: {
+      scanned_at: 1700000000,
+      contract: { is_contract: true, is_verified: false },
+      deployer: {
+        funded_by: "0x722122df12d4e14e13ac3b6895a86e84145b6967",
+        first_seen_at: 1700000000 - 86400 * 7,
+      },
+      signals: { mixer_funded: true, fresh_wallet: true, ofac_sanctioned: true },
+      activity_count: 3,
+      corpus_match: null,
+    },
+    expect: {
+      risk_score: 100, // 100+35+15+10+20 = 180, clamped to 100
+      verdict: "do_not_interact",
+      findings: [
+        {
+          rule_id: "ofac_sanctioned",
+          points: 100,
+          reason:
+            "address is on the OFAC SDN sanctions list — transacting may violate U.S. sanctions law",
+          severity: "critical",
+        },
+        {
+          rule_id: "deployer_funded_by_mixer",
+          points: 35,
+          reason: "deployer funded by a known mixer address (0x722122df12d4e14e13ac3b6895a86e84145b6967)",
+          severity: "high",
+        },
+        {
+          rule_id: "deployer_fresh_wallet",
+          points: 15,
+          reason: "deployer wallet is 7 days old (threshold: 30)",
+          severity: "med",
+        },
+        {
+          rule_id: "deployer_low_activity",
+          points: 10,
+          reason: "deployer has 3 txs on record (threshold: <10)",
+          severity: "med",
+        },
+        {
+          rule_id: "unverified_source",
+          points: 20,
+          reason: "contract source code is not verified on Etherscan",
+          severity: "med",
+        },
+      ],
+    },
+  },
+  {
+    name: "ofac_sanctioned omitted — does not fire",
+    input: {
+      scanned_at: 1700000000,
+      contract: { is_contract: true, is_verified: true },
+      deployer: { funded_by: "0xabc", first_seen_at: 1600000000 },
+      signals: { mixer_funded: false, fresh_wallet: false }, // ofac_sanctioned absent
+      activity_count: 500,
+      corpus_match: null,
+    },
+    expect: { risk_score: 0, verdict: "clean", findings: [] },
+  },
 ];
 
 let pass = 0;
@@ -261,6 +353,48 @@ for (const c of cases) {
     fail++;
   }
 }
+
+// rule_not_a_contract is exported standalone (not in default RULES) so EOA
+// tagging is opt-in. Test it directly here.
+function check(name: string, fn: () => void): void {
+  try {
+    fn();
+    console.log(`pass  ${name}`);
+    pass++;
+  } catch (e) {
+    console.error(`FAIL  ${name}`);
+    console.error(e);
+    fail++;
+  }
+}
+
+const eoaInput: ScoringInput = {
+  scanned_at: 1700000000,
+  contract: { is_contract: false, is_verified: false },
+  deployer: null,
+  signals: { mixer_funded: false, fresh_wallet: false },
+  activity_count: 0,
+  corpus_match: null,
+};
+
+check("rule_not_a_contract: fires for EOA with info severity", () => {
+  const out = rule_not_a_contract(eoaInput);
+  assert.deepStrictEqual(out, {
+    rule_id: "not_a_contract",
+    points: 0,
+    reason:
+      "address is an EOA (externally owned account); contract-analysis rules don't apply. sanctions screening is the only check available for wallets in v0.1",
+    severity: "info",
+  });
+});
+
+check("rule_not_a_contract: returns null for a contract", () => {
+  const out = rule_not_a_contract({
+    ...eoaInput,
+    contract: { is_contract: true, is_verified: true },
+  });
+  assert.strictEqual(out, null);
+});
 
 console.log(`\n${pass}/${pass + fail} fixtures passed`);
 if (fail > 0) process.exit(1);
